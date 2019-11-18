@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:jms="http://www.springframework.org/schema/jms"
+       xmlns:c="http://www.springframework.org/schema/c"
+       xsi:schemaLocation="http://www.springframework.org/schema/jms http://www.springframework.org/schema/jms/spring-jms-4.3.xsd
+        http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.3.xsd">
+    <!-- 开启包扫描 （减少在xml中注册bean）-->
+    <context:component-scan base-package="com.ivan.activemq" />
+    <!-- #### ActiveMq配置 start ####-->
+    <!-- 1. ActiveMq连接工厂 -->
+    <bean id="activeMQConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
+        <property name="brokerURL" value="tcp://192.168.0.102:61616" />
+    </bean>
+    <!--2. Spring Caching 连接工厂(类似数据库线程池的东西，减少连接的创建。) -->
+    <!-- 由于jmsTemplate每次发送消息都需要创建连接和创建session了，所以引入这个类似连接池的连接工厂，优化Mq的性能 -->
+    <bean id="connectionFactory" class="org.springframework.jms.connection.CachingConnectionFactory">
+        <!-- 目标连接工厂 指向 ActiveMq工厂 -->
+        <property name="targetConnectionFactory" ref="activeMQConnectionFactory" />
+        <!-- session缓存的最大个数-->
+        <property name="sessionCacheSize" value="100" />
+    </bean>
+    <!-- 3.配置jmsTemplate，用于发送发送mq消息 -->
+    <bean id="jmsTemplate" class="org.springframework.jms.core.JmsTemplate">
+        <property name="connectionFactory" ref="connectionFactory" />
+        <property name="defaultDestination" ref="destinationTopic" />
+        <property name="messageConverter">
+            <bean class="org.springframework.jms.support.converter.SimpleMessageConverter"></bean>
+        </property>
+        <!-- 设置 jmsTemplate 不支持订阅模式，即：只支持queue模式。
+             如果项目需要同时支持queue和topic，那么就需要另外注册一个jmsTemplate（把pubSubDomain设为true）-->
+        <property name="pubSubDomain" value="false"></property>
+    </bean>
+
+    <bean id="destinationQueue" class="org.apache.activemq.command.ActiveMQQueue">
+        <constructor-arg index="0" value="spring-active-queue" />
+    </bean>
+
+    <bean id="destinationTopic" class="org.apache.activemq.command.ActiveMQTopic">
+        <constructor-arg index="0" value="spring-active-topic" />
+    </bean>
+
+    <bean id="jsmContainer" class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+        <property name="connectionFactory" ref="connectionFactory"/>
+        <property name="destination" ref="destinationTopic"/>
+        <property name="messageListener" ref="myMessageListener"/>
+    </bean>
+
+<!--    <bean id="myMessageListener" class="com.ivan.activemq.queue.MyMessageListener"/>-->
+    <!-- 4.定义Queue监听器 -->
+<!--    <jms:listener-container destination-type="queue" connection-factory="connectionFactory">-->
+<!--        &lt;!&ndash; TODO 每添加一个queue的监听，都需要在这里添加一个配置 &ndash;&gt;-->
+<!--        &lt;!&ndash; 这样配置就可以方便的对多个队列监听 , 每增加一个队列只需要添加一个 jms:listener &ndash;&gt;-->
+<!--        &lt;!&ndash; destination:队列名称, ref:指向对应的监听器对象 &ndash;&gt;-->
+<!--        &lt;!&ndash; 示例: <jms:listener destination="queueName" ref="consumerBean" /> &ndash;&gt;-->
+<!--    </jms:listener-container>-->
+    <!-- ### ActiveMq配置 end ####-->
+</beans>
